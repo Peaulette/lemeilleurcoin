@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Le meilleur coin — locale avec comptes</title>
+<link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+<style>
+  /* Toast notifications */
+  #toast {
+    position: fixed;
+    bottom: 1rem;
+    right: 1rem;
+    background: #4ade80;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 50;
+  }
+  #toast.show { opacity: 1; }
+  /* Grisé pour annonces plus disponibles */
+  .found { opacity: 0.5; }
+</style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+<header class="bg-indigo-600 text-white p-4">
+  <div class="max-w-6xl mx-auto flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold">Le meilleur coin</h1>
+      <p class="text-sm">Petites annonces vélo — version locale (comptes)</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="userBadge" class="text-sm hidden"></span>
+      <button id="btnLogin" class="bg-white text-indigo-600 px-3 py-1 rounded shadow">Connexion</button>
+      <button id="btnRegister" class="bg-white text-indigo-600 px-3 py-1 rounded shadow">Inscription</button>
+      <button id="btnNouvelle" class="bg-white text-indigo-600 px-3 py-1 rounded shadow">Publier</button>
+      <button id="btnLogout" class="bg-white text-indigo-600 px-3 py-1 rounded shadow hidden">Déconnexion</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-6xl mx-auto p-4">
+  <!-- Recherche & filtres -->
+  <section class="mb-4">
+    <div class="flex gap-3 flex-wrap">
+      <input id="q" type="search" placeholder="Rechercher" class="flex-1 p-2 rounded border" />
+      <select id="filterCat" class="p-2 rounded border">
+        <option value="">Toutes catégories</option>
+        <option>Vélos complets</option>
+        <option>Cadres</option>
+        <option>Roues</option>
+        <option>Transmission</option>
+        <option>Accessoires</option>
+      </select>
+      <input id="filterLoc" placeholder="Ville / code postal" class="p-2 rounded border" />
+      <select id="sortBy" class="p-2 rounded border">
+        <option value="new">Plus récentes</option>
+        <option value="price_asc">Prix croissant</option>
+        <option value="price_desc">Prix décroissant</option>
+      </select>
+      <select id="filterFound" class="p-2 rounded border">
+        <option value="">Disponibilité</option>
+        <option value="available">Disponibles</option>
+        <option value="found">Plus disponibles</option>
+      </select>
+      <button id="btnSearch" class="bg-indigo-600 text-white px-4 py-2 rounded">Filtrer</button>
+    </div>
+  </section>
+
+  <!-- Grille annonces -->
+  <section id="grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></section>
+</main>
+
+<!-- Toast notification -->
+<div id="toast"></div>
+
+<!-- Modal formulaire annonce -->
+<div id="modal" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center p-4">
+  <div class="bg-white rounded shadow max-w-3xl w-full p-4 relative">
+    <button id="closeModal" class="absolute right-4 top-4 text-gray-500">✕</button>
+    <h2 class="text-xl font-bold mb-2">Publier une annonce</h2>
+    <form id="formAnnonce" class="space-y-2">
+      <input id="titre" placeholder="Titre" class="w-full p-2 border rounded" required />
+      <select id="categorie" class="w-full p-2 border rounded" required>
+        <option value="">Choisir catégorie</option>
+        <option>Vélos complets</option>
+        <option>Cadres</option>
+        <option>Roues</option>
+        <option>Transmission</option>
+        <option>Accessoires</option>
+      </select>
+      <input id="prix" placeholder="Prix ou 'échange'" class="w-full p-2 border rounded" />
+      <input id="localisation" placeholder="Ville ou code postal" class="w-full p-2 border rounded" />
+      <input id="contact" placeholder="Moyen de contact (tel, mail, insta...)" class="w-full p-2 border rounded" required />
+      <textarea id="description" placeholder="Description" class="w-full p-2 border rounded" required></textarea>
+      <div>
+        <label class="text-sm">Photos (max 5) — persistées localement (data URLs)</label>
+        <input id="photos" type="file" accept="image/*" multiple class="w-full" />
+      </div>
+      <div class="flex justify-end gap-2">
+        <button type="button" id="cancel" class="px-4 py-2 border rounded">Annuler</button>
+        <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded">Publier</button>
+      </div>
+    </form>
+    <p id="codeAffiche" class="mt-2 text-sm text-gray-600"></p>
+  </div>
+</div>
+
+<!-- Modal login / register -->
+<div id="modalAuth" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center p-4">
+  <div class="bg-white rounded shadow max-w-md w-full p-4 relative">
+    <button id="closeAuth" class="absolute right-4 top-4 text-gray-500">✕</button>
+    <h2 id="authTitle" class="text-xl font-bold mb-2">Connexion</h2>
+    <form id="formAuth" class="space-y-2">
+      <input id="authPseudo" placeholder="Pseudo" class="w-full p-2 border rounded" required />
+      <input id="authPass" type="password" placeholder="Mot de passe" class="w-full p-2 border rounded" required />
+      <div class="flex justify-end gap-2">
+        <button type="button" id="switchAuth" class="px-4 py-2 border rounded">Créer un compte</button>
+        <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded">Valider</button>
+      </div>
+    </form>
+    <p id="authMsg" class="mt-2 text-sm text-gray-600"></p>
+  </div>
+</div>
+
+<!-- Modal détail annonce -->
+<div id="modalDetail" class="fixed inset-0 bg-black bg-opacity-40 hidden items-center justify-center p-4">
+  <div class="bg-white rounded shadow max-w-3xl w-full p-4 relative overflow-auto max-h-[90vh]">
+    <button id="closeDetail" class="absolute right-4 top-4 text-gray-500">✕</button>
+    <div id="detailContent"></div>
+  </div>
+</div>
+
+<script>
+/* ---------- stockage local ---------- */
+let annonces = JSON.parse(localStorage.getItem("annonces")||"[]");
+let users = JSON.parse(localStorage.getItem("lm_users")||"[]");
+let currentUser = JSON.parse(localStorage.getItem("lm_currentUser")||"null");
+
+function saveAll(){
+  localStorage.setItem("annonces", JSON.stringify(annonces));
+  localStorage.setItem("lm_users", JSON.stringify(users));
+  localStorage.setItem("lm_currentUser", JSON.stringify(currentUser));
+}
+
+/* ---------- crypto / code ---------- */
+async function hashPassword(password){
+  const enc = new TextEncoder().encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function randomCode(len=6){ return Math.random().toString(36).slice(2,2+len).toUpperCase(); }
+
+/* ---------- toast ---------- */
+function showToast(msg, success=true){
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.style.background = success ? '#4ade80' : '#f87171';
+  toast.classList.add('show');
+  setTimeout(()=>toast.classList.remove('show'),3000);
+}
+
+/* ---------- UI éléments ---------- */
+const btnNouvelle = document.getElementById('btnNouvelle');
+const modal = document.getElementById('modal');
+const closeModal = document.getElementById('closeModal');
+const cancel = document.getElementById('cancel');
+const form = document.getElementById('formAnnonce');
+const codeAffiche = document.getElementById('codeAffiche');
+
+const btnLogin = document.getElementById('btnLogin');
+const btnRegister = document.getElementById('btnRegister');
+const modalAuth = document.getElementById('modalAuth');
+const closeAuth = document.getElementById('closeAuth');
+const formAuth = document.getElementById('formAuth');
+const authTitle = document.getElementById('authTitle');
+const switchAuth = document.getElementById('switchAuth');
+const authMsg = document.getElementById('authMsg');
+const userBadge = document.getElementById('userBadge');
+const btnLogout = document.getElementById('btnLogout');
+
+const modalDetail = document.getElementById('modalDetail');
+const detailContent = document.getElementById('detailContent');
+
+/* ---------- Modals open/close ---------- */
+btnNouvelle.addEventListener('click', ()=> { modal.classList.remove('hidden'); modal.classList.add('flex'); codeAffiche.textContent=''; });
+closeModal.addEventListener('click', ()=> modal.classList.add('hidden'));
+cancel.addEventListener('click', ()=> modal.classList.add('hidden'));
+
+/* Fermer modals clic sur fond */
+[modal, modalAuth, modalDetail].forEach(m=>{
+  m.addEventListener('click', e=>{
+    if(e.target === m) m.classList.add('hidden');
+  });
+});
+
+/* ---------- Auth ---------- */
+function openAuth(mode='login'){
+  authMsg.textContent='';
+  modalAuth.classList.remove('hidden'); modalAuth.classList.add('flex');
+  authTitle.textContent = mode==='login' ? 'Connexion' : 'Inscription';
+  switchAuth.textContent = mode==='login' ? 'Créer un compte' : "J'ai déjà un compte";
+  formAuth.dataset.mode = mode;
+  document.getElementById('authPseudo').value=''; document.getElementById('authPass').value='';
+}
+btnLogin.addEventListener('click', ()=> openAuth('login'));
+btnRegister.addEventListener('click', ()=> openAuth('register'));
+switchAuth.addEventListener('click', ()=> openAuth(formAuth.dataset.mode === 'login' ? 'register' : 'login'));
+
+formAuth.addEventListener('submit', async e=>{
+  e.preventDefault();
+  const mode=formAuth.dataset.mode; const pseudo=document.getElementById('authPseudo').value.trim(); const pass=document.getElementById('authPass').value;
+  if(!pseudo||!pass){ authMsg.textContent='Pseudo et mot de passe requis.'; return; }
+  const passHash=await hashPassword(pass);
+  if(mode==='register'){
+    if(users.some(u=>u.pseudo.toLowerCase()===pseudo.toLowerCase())){ authMsg.textContent='Pseudo déjà pris'; return; }
+    const user={id:Date.now(), pseudo, passHash}; users.push(user); currentUser={id:user.id,pseudo:user.pseudo};
+    saveAll(); showToast('Compte créé et connecté'); updateHeader(); modalAuth.classList.add('hidden');
+  } else {
+    const user=users.find(u=>u.pseudo.toLowerCase()===pseudo.toLowerCase());
+    if(!user){ authMsg.textContent='Utilisateur introuvable'; return; }
+    if(user.passHash!==passHash){ authMsg.textContent='Mot de passe incorrect'; return; }
+    currentUser={id:user.id,pseudo:user.pseudo}; saveAll(); showToast('Connecté'); updateHeader(); modalAuth.classList.add('hidden');
+  }
+});
+btnLogout.addEventListener('click', ()=>{ currentUser=null; saveAll(); updateHeader(); showToast('Déconnecté'); });
+
+function updateHeader(){
+  if(currentUser){ userBadge.textContent=`Connecté : ${currentUser.pseudo}`; userBadge.classList.remove('hidden'); btnLogin.classList.add('hidden'); btnRegister.classList.add('hidden'); btnLogout.classList.remove('hidden'); }
+  else { userBadge.classList.add('hidden'); btnLogin.classList.remove('hidden'); btnRegister.classList.remove('hidden'); btnLogout.classList.add('hidden'); }
+}
+
+/* ---------- photos ---------- */
+function fileToDataURL(file){ return new Promise((res,rej)=>{ const reader=new FileReader(); reader.onload=()=>res(reader.result); reader.onerror=rej; reader.readAsDataURL(file); }); }
+
+/* ---------- submit annonce ---------- */
+form.addEventListener('submit', async e=>{
+  e.preventDefault();
+  const titre=document.getElementById('titre').value.trim();
+  const categorie=document.getElementById('categorie').value;
+  const prix=document.getElementById('prix').value.trim();
+  const description=document.getElementById('description').value.trim();
+  const localisation=document.getElementById('localisation').value.trim();
+  const contact=document.getElementById('contact').value.trim();
+  const files=document.getElementById('photos').files;
+  const photos=[]; for(let i=0;i<files.length && i<5;i++){ try{ photos.push(await fileToDataURL(files[i])); } catch(e){ console.error(e); } }
+  const created_at=new Date().toISOString();
+  if(currentUser){
+    const annonce={id:Date.now(), titre, categorie, prix, description, localisation, contact, photos, created_at, owner:currentUser.pseudo, found:false};
+    annonces.push(annonce);
+    codeAffiche.textContent=`Annonce publiée sous le compte ${currentUser.pseudo}.`;
+    showToast('Annonce publiée !');
+  } else {
+    const gestion_code=randomCode(6);
+    const annonce={id:Date.now(), titre, categorie, prix, description, localisation, contact, photos, created_at, gestion_code, found:false};
+    annonces.push(annonce);
+    codeAffiche.textContent=`Code de gestion : ${gestion_code}`;
+    showToast('Annonce publiée (anonyme) !');
+  }
+  saveAll(); form.reset(); renderGrid();
+});
+
+/* ---------- render grille ---------- */
+function renderGrid(){
+  const grid=document.getElementById('grid'); grid.innerHTML='';
+  let list=[...annonces];
+  const q=(document.getElementById('q').value||'').toLowerCase();
+  const cat=document.getElementById('filterCat').value;
+  const loc=(document.getElementById('filterLoc').value||'').toLowerCase();
+  const sort=document.getElementById('sortBy').value;
+  const foundFilter=document.getElementById('filterFound').value;
+
+  if(q) list=list.filter(a=>(a.titre+a.description).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").includes(q.normalize("NFD").replace(/[\u0300-\u036f]/g,"")));
+  if(cat) list=list.filter(a=>a.categorie===cat);
+  if(loc) list=list.filter(a=>(a.localisation||'').toLowerCase().includes(loc));
+  if(foundFilter==='available') list=list.filter(a=>!a.found);
+  if(foundFilter==='found') list=list.filter(a=>a.found);
+
+  if(sort==='price_asc'||sort==='price_desc'){ list.sort((x,y)=>{ const num=s=>{if(!s) return Infinity;const n=parseFloat(s.replace(/[^0-9.,]/g,''));return isNaN(n)?Infinity:n;}; return (num(x.prix)-num(y.prix))*(sort==='price_asc'?1:-1); }); }
+  else list.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
+
+  list.forEach(a=>{
+    const div=document.createElement('div');
+    div.className=`bg-white rounded shadow p-3 flex flex-col hover:shadow-lg transition-all ${a.found?'found':''}`;
+    div.innerHTML=`
+      <div class="h-40 bg-gray-200 rounded overflow-hidden mb-2 flex items-center justify-center relative">
+        ${a.photos && a.photos.length ? `<img src="${a.photos[0]}" class="w-full h-full object-cover"/>` : '<div class="text-gray-500">Pas de photo</div>'}
+        ${a.found ? '<span class="absolute top-1 right-1 bg-red-500 text-white px-2 py-0.5 text-xs rounded">plus disponible</span>' : ''}
+      </div>
+      <h3 class="font-semibold text-lg">${a.titre}</h3>
+      <p class="text-sm text-gray-500">${a.categorie} — ${a.localisation||''}</p>
+      <p class="mt-1 text-sm">${a.description.slice(0,80)}${a.description.length>80?'…':''}</p>
+      <div class="mt-2 font-bold">${a.prix||''}</div>
+      <div class="flex justify-between mt-2">
+        <button class="bg-indigo-600 text-white px-3 py-1 rounded">Voir</button>
+        ${a.owner ? `<span class="text-xs text-gray-400">Propriétaire: ${a.owner}</span>` : a.gestion_code ? `<span class="text-xs text-gray-400">Annonce anonyme</span>` : ''}
+      </div>
+    `;
+    div.querySelector('button').addEventListener('click',()=>openDetail(a));
+    grid.appendChild(div);
+  });
+}
+
+/* ---------- détail ---------- */
+function openDetail(a){
+  detailContent.innerHTML=`
+    <h2 class="text-2xl font-bold">${a.titre}</h2>
+    <p class="text-sm text-gray-500">${a.categorie} — ${a.localisation||''}</p>
+    <div class="mt-2 grid grid-cols-2 gap-2">${(a.photos||[]).map(p=>`<img src="${p}" class="w-full max-h-40 object-cover rounded">`).join('')||'<div class="p-4 bg-gray-200 rounded">Pas de photo</div>'}</div>
+    <p class="mt-2 whitespace-pre-wrap">${a.description}</p>
+    <p class="mt-2"><strong>Contact :</strong> ${a.contact}</p>
+    <p class="mt-2 text-xl font-semibold">${a.prix||''}</p>
+    <div id="ownerActions" class="mt-4 flex gap-2 flex-wrap"></div>
+    <p class="mt-4 text-xs text-gray-500 border-t pt-2">
+      ${a.owner ? `Propriétaire : <strong>${a.owner}</strong>` : `Annonce anonyme` }
+      ${a.gestion_code ? `<br>Code de gestion : <strong>${a.gestion_code}</strong>` : ''}
+    </p>
+  `;
+  modalDetail.classList.remove('hidden'); modalDetail.classList.add('flex');
+  document.getElementById('closeDetail').onclick=()=>modalDetail.classList.add('hidden');
+
+  const ownerActions = document.getElementById('ownerActions');
+
+  // Actions pour propriétaire connecté
+  if(currentUser && a.owner && currentUser.pseudo===a.owner){
+    const btnMod=document.createElement('button'); btnMod.className='px-3 py-1 border rounded'; btnMod.textContent='Modifier'; btnMod.onclick=()=>editAsOwner(a);
+    const btnDel=document.createElement('button'); btnDel.className='px-3 py-1 border rounded text-red-600'; btnDel.textContent='Supprimer'; btnDel.onclick=()=>{ if(confirm('Supprimer votre annonce ?')){ annonces=annonces.filter(x=>x.id!==a.id); saveAll(); modalDetail.classList.add('hidden'); renderGrid(); showToast('Annonce supprimée'); } };
+    const btnFound=document.createElement('button'); btnFound.className='px-3 py-1 border rounded bg-green-100'; btnFound.textContent=a.found?'Marquer disponible':'Marquer Plus Disponible'; btnFound.onclick=()=>{ a.found=!a.found; saveAll(); renderGrid(); showToast(a.found?'Annonce marquée plus disponible':'Annonce marquée disponible'); openDetail(a); };
+    ownerActions.appendChild(btnMod); ownerActions.appendChild(btnDel); ownerActions.appendChild(btnFound);
+  }
+  // Actions via gestion_code
+  else if(a.gestion_code){
+    const btnDel=document.createElement('button'); btnDel.className='px-3 py-1 border rounded text-red-600'; btnDel.textContent='Supprimer (code)'; btnDel.onclick=()=>{ const code=prompt('Code ?'); if(code===a.gestion_code){ annonces=annonces.filter(x=>x.id!==a.id); saveAll(); modalDetail.classList.add('hidden'); renderGrid(); showToast('Annonce supprimée'); } else alert('Code incorrect'); };
+    const btnMod=document.createElement('button'); btnMod.className='px-3 py-1 border rounded'; btnMod.textContent='Modifier (code)'; btnMod.onclick=()=>{ const code=prompt('Code ?'); if(code===a.gestion_code){ document.getElementById('titre').value=a.titre; document.getElementById('categorie').value=a.categorie; document.getElementById('prix').value=a.prix; document.getElementById('localisation').value=a.localisation; document.getElementById('contact').value=a.contact; document.getElementById('description').value=a.description; annonces=annonces.filter(x=>x.id!==a.id); saveAll(); modalDetail.classList.add('hidden'); modal.classList.remove('hidden'); modal.classList.add('flex'); } else alert('Code incorrect'); };
+    ownerActions.appendChild(btnMod); ownerActions.appendChild(btnDel);
+  }
+  else{ ownerActions.innerHTML='<span class="text-sm text-gray-500">Tu dois être propriétaire ou posséder le code pour modifier/supprimer.</span>'; }
+}
+
+/* ---------- modifier annonce ---------- */
+function editAsOwner(a){
+  document.getElementById('titre').value=a.titre; document.getElementById('categorie').value=a.categorie;
+  document.getElementById('prix').value=a.prix; document.getElementById('localisation').value=a.localisation;
+  document.getElementById('contact').value=a.contact; document.getElementById('description').value=a.description;
+  annonces=annonces.filter(x=>x.id!==a.id); saveAll(); modalDetail.classList.add('hidden'); modal.classList.remove('hidden'); modal.classList.add('flex');
+}
+
+/* ---------- search ---------- */
+document.getElementById('btnSearch').onclick=renderGrid;
+document.getElementById('q').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); renderGrid(); } });
+
+/* ---------- init ---------- */
+updateHeader(); renderGrid();
+</script>
+</body>
+</html>
